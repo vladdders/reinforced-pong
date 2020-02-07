@@ -188,9 +188,10 @@ def train(model, start):
         if iteration % 25000 == 0:
             torch.save(model, "pretrained_model/current_model_" + str(iteration) + ".pth")
 
-        print("iteration:", iteration, "elapsed time:", time.time() - start, "epsilon:", epsilon, "action:",
-              action_index.cpu().detach().numpy(), "reward:", reward.numpy()[0][0], "Q max:",
-              np.max(output.cpu().detach().numpy()))
+        if iteration % 1000 == 0:
+            print("iteration:", iteration, "elapsed time:", time.time() - start, "epsilon:", epsilon, "action:",
+                  action_index.cpu().detach().numpy(), "reward:", reward.numpy()[0][0], "Q max:",
+                  np.max(output.cpu().detach().numpy()))
 
 
 def test(model):
