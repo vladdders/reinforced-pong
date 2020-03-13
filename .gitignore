@@ -2,3 +2,5 @@ venv/*
 .idea/*
 __pycache__/*
 pretrained_model/**
+pong/simple_game.py
+pong/__pycache__/*

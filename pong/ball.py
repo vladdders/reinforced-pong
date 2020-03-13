@@ -1,7 +1,7 @@
 import pygame
 from random import randint
 
-import constants
+from pong import constants
 
 
 class Ball(pygame.sprite.Sprite):
