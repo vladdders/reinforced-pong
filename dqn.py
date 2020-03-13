@@ -2,14 +2,16 @@ import os
 import random
 import sys
 import time
+import re
 
 import cv2
-import numpy as np
+import numpy
 import torch
 import torch.nn as nn
 import torch.optim as optim
 
-from single import Game
+from pong.train_game import Game
+
 
 class NeuralNetwork(nn.Module):
     # https://github.com/nevenp/dqn_flappy_bird
@@ -17,7 +19,7 @@ class NeuralNetwork(nn.Module):
     def __init__(self):
         super(NeuralNetwork, self).__init__()
 
-        self.number_of_actions = 2
+        self.number_of_actions = 3
         self.gamma = 0.99
         self.final_epsilon = 0.0001
         self.initial_epsilon = 0.1
@@ -58,7 +60,7 @@ def init_weights(m):
 
 def image_to_tensor(image):
     image_tensor = image.transpose(2, 0, 1)
-    image_tensor = image_tensor.astype(np.float32)
+    image_tensor = image_tensor.astype(numpy.float32)
     image_tensor = torch.from_numpy(image_tensor)
     if torch.cuda.is_available():  # put on GPU if CUDA is available
         image_tensor = image_tensor.cuda()
@@ -66,14 +68,15 @@ def image_to_tensor(image):
 
 
 def resize_and_bgr2gray(image):
-    image = image[0:288, 0:404]
+    image = image[0:600, :]
     image_data = cv2.cvtColor(cv2.resize(image, (84, 84)), cv2.COLOR_BGR2GRAY)
     image_data[image_data > 0] = 255
-    image_data = np.reshape(image_data, (84, 84, 1))
+    image_data = numpy.reshape(image_data, (84, 84, 1))
+
     return image_data
 
 
-def train(model, start):
+def train(model, start, continue_iteration=None):
     # define Adam optimizer
     optimizer = optim.Adam(model.parameters(), lr=1e-6)
 
@@ -98,10 +101,12 @@ def train(model, start):
     epsilon = model.initial_epsilon
     iteration = 0
 
-    epsilon_decrements = np.linspace(model.initial_epsilon, model.final_epsilon, model.number_of_iterations)
+    continue_iter = continue_iteration if not None else 0
+
+    epsilon_decrements = numpy.linspace(model.initial_epsilon, model.final_epsilon, model.number_of_iterations)
 
     # main infinite loop
-    while iteration < model.number_of_iterations:
+    while iteration <  model.number_of_iterations:
         # get output from the neural network
         output = model(state)[0]
 
@@ -112,8 +117,6 @@ def train(model, start):
 
         # epsilon greedy exploration
         random_action = random.random() <= epsilon
-        if random_action:
-            print("Performed random action!")
         action_index = [torch.randint(model.number_of_actions, torch.Size([]), dtype=torch.int)
                         if random_action
                         else torch.argmax(output)][0]
@@ -130,7 +133,7 @@ def train(model, start):
         state_1 = torch.cat((state.squeeze(0)[1:, :, :], image_data_1)).unsqueeze(0)
 
         action = action.unsqueeze(0)
-        reward = torch.from_numpy(np.array([reward], dtype=np.float32)).unsqueeze(0)
+        reward = torch.from_numpy(numpy.array([reward], dtype=numpy.float32)).unsqueeze(0)
 
         # save transition to replay memory
         replay_memory.append((state, action, reward, state_1, terminal))
@@ -186,12 +189,12 @@ def train(model, start):
         iteration += 1
 
         if iteration % 25000 == 0:
-            torch.save(model, "pretrained_model/current_model_" + str(iteration) + ".pth")
+            torch.save(model, "pretrained_model/current_model_" + str(iteration + continue_iter) + ".pth")
 
         if iteration % 1000 == 0:
             print("iteration:", iteration, "elapsed time:", time.time() - start, "epsilon:", epsilon, "action:",
                   action_index.cpu().detach().numpy(), "reward:", reward.numpy()[0][0], "Q max:",
-                  np.max(output.cpu().detach().numpy()))
+                  numpy.max(output.cpu().detach().numpy()))
 
 
 def test(model):
@@ -232,18 +235,32 @@ def test(model):
 def main(mode):
     cuda_is_available = torch.cuda.is_available()
 
-    if mode == 'test':
-        model = torch.load(
-            'pretrained_model/current_model_2000000.pth',
-            map_location='cpu' if not cuda_is_available else None
-        ).eval()
+    if mode[1] == 'test':
 
-        if cuda_is_available:  # put on GPU if CUDA is available
-            model = model.cuda()
+        if len(mode) == 3:
+            checkpoint_filename = mode[2]
+            checkpoint_path = os.path.join("pretrained_model", checkpoint_filename)
+            if os.path.isfile(checkpoint_path):
+                model = torch.load(
+                    checkpoint_path,
+                    map_location='cpu' if not cuda_is_available else None
+                ).eval()
 
-        test(model)
+                if cuda_is_available:  # put on GPU if CUDA is available
+                    model = model.cuda()
 
-    elif mode == 'train':
+                test(model)
+            else:
+
+                print(f"no such model named {checkpoint_filename} in directory pretrained_model.")
+                exit()
+        else:
+
+            print("You must provide checkpoint filename. "
+                  "The script looks for it in pretrained_model directory")
+            exit()
+
+    elif mode[1] == 'train':
         if not os.path.exists('pretrained_model/'):
             os.mkdir('pretrained_model/')
 
@@ -255,8 +272,35 @@ def main(mode):
         model.apply(init_weights)
         start = time.time()
 
-        train(model, start)
+        train(model, start, continue_iteration=None)
+
+    elif mode[1] == 'continue':
+        if len(mode) == 3:
+            checkpoint_filename = mode[2]
+            checkpoint_path = os.path.join("pretrained_model", checkpoint_filename)
+            if os.path.isfile(checkpoint_path):
+                continue_iterarion = re.search('\d+', checkpoint_filename)
+                continue_iterarion = int(continue_iterarion.group())
+
+                model = torch.load(checkpoint_path)
+
+                if cuda_is_available:  # put on GPU if CUDA is available
+                    model = model.cuda()
+
+                start = time.time()
+
+                train(model, start, continue_iteration=continue_iterarion)
+
+            else:
+
+                print(f"no such model named {checkpoint_filename} in directory pretrained_model.")
+                exit()
+        else:
+
+            print("You must provide checkpoint filename. "
+                  "The script looks for it in pretrained_model directory")
+            exit()
 
 
 if __name__ == "__main__":
-    main(sys.argv[1])
+    main(sys.argv)
