@@ -21,6 +21,9 @@ If you wish to test my model simply type:
 ```shell script
 python dqn.py test current_model_4000000.pth
 ```
+On the RHS the paddle changes position by tracking the y-position of the ball.
+Conversely, on the LHS the paddle changes it's position according to the action
+predicted by the DQN algorithm.
 
 ![](imgs/animated.gif)
 
@@ -33,10 +36,13 @@ python dqn.py train
 Every 25000 epochs a checkpoint is saved in the `pretrained_model` directory.
 
 <h3>Continue training</h3>
+
 ```shell script
 python dqn.py continue <name_of_checkpoint>
 ```
+
 For example:
+
 ```shell script
 python dqn.py continue current_model_4000000.pth
 ```
